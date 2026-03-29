@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Maps Timeline Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0f1a;
+    --surface: #111827;
+    --card: #1a2235;
+    --border: #1e2d45;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --orange: #fb923c;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --dim: #334155;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 20%, rgba(56,189,248,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 30% 60%, rgba(129,140,248,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 70% 10%, rgba(56,189,248,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 85% 80%, rgba(52,211,153,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 50% 40%, rgba(251,146,60,0.15) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 2rem 1.2rem 4rem; }
+
+  header { text-align: center; padding: 2.5rem 0 2rem; }
+  header .eyebrow { font-size: 0.65rem; letter-spacing: 0.25em; color: var(--accent); text-transform: uppercase; margin-bottom: 0.6rem; }
+  header h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.15;
+  }
+  header p { margin-top: 0.6rem; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; }
+
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 14px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: rgba(17,24,39,0.6);
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(56,189,248,0.04); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .upload-icon { font-size: 2.2rem; margin-bottom: 0.6rem; }
+  .upload-zone h3 { font-family: 'Fraunces', serif; font-size: 1.1rem; color: var(--text); font-weight: 300; }
+  .upload-zone p { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    align-items: end;
+  }
+  .field label { display: block; font-size: 0.65rem; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 0.4rem; }
+  .field input[type="date"] {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.82rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input[type="date"]:focus { border-color: var(--accent); }
+  .field input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+
+  .btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    color: #0b0f1a;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.6rem 1.4rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-export { background: linear-gradient(135deg, #34d399, #059669); }
+
+  .stats { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem 1rem;
+    flex: 1;
+    min-width: 100px;
+    text-align: center;
+  }
+  .stat .val { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 600; color: var(--accent); line-height: 1; }
+  .stat .lbl { font-size: 0.63rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 0.2rem; }
+
+  .timeline { position: relative; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent2), transparent);
+    opacity: 0.3;
+  }
+
+  .day-group { margin-bottom: 1.8rem; padding-left: 2rem; }
+  .day-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; position: relative; }
+  .day-header::before {
+    content: '';
+    position: absolute;
+    left: -1.7rem;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .day-label { font-family: 'Fraunces', serif; font-size: 0.95rem; font-weight: 600; color: var(--text); }
+  .day-count { font-size: 0.65rem; color: var(--muted); background: var(--dim); padding: 0.15rem 0.5rem; border-radius: 99px; }
+
+  .entry {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.2s, transform 0.15s;
+    animation: fadeUp 0.3s ease both;
+  }
+  .entry:hover { border-color: var(--dim); transform: translateX(2px); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .entry-head { display: flex; align-items: flex-start; gap: 0.7rem; }
+  .entry-icon { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; margin-top: 1px; }
+  .icon-place    { background: rgba(52,211,153,0.12); }
+  .icon-activity { background: rgba(251,146,60,0.12); }
+  .icon-unknown  { background: rgba(100,116,139,0.12); }
+
+  .entry-body { flex: 1; min-width: 0; }
+  .entry-name { font-size: 0.85rem; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-name a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--accent); opacity: 0.9; }
+  .entry-name a:hover { opacity: 1; }
+
+  .entry-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
+  .tag { font-size: 0.62rem; padding: 0.15rem 0.45rem; border-radius: 5px; letter-spacing: 0.04em; }
+  .tag-time { background: rgba(56,189,248,0.1);   color: var(--accent); }
+  .tag-type { background: rgba(129,140,248,0.1);  color: var(--accent2); }
+  .tag-addr { background: rgba(100,116,139,0.1);  color: var(--muted); max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag-dist { background: rgba(52,211,153,0.1);   color: var(--green); }
+
+  .state-msg { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.8rem; }
+  .state-msg .icon { font-size: 2.5rem; margin-bottom: 0.6rem; }
+  .state-msg h3 { font-family: 'Fraunces', serif; font-size: 1.1rem; color: var(--text); font-weight: 300; margin-bottom: 0.3rem; }
+
+  #progress { display: none; text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.75rem; }
+  #progress .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 0.6rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .search-bar { margin-bottom: 1rem; }
+  .search-bar input {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.55rem 0.9rem;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.82rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: var(--accent2); }
+  .search-bar input::placeholder { color: var(--muted); }
+
+  @media (max-width: 520px) {
+    .controls { grid-template-columns: 1fr 1fr; }
+    .controls .btn        { grid-column: span 1; }
+    .controls .btn-export { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="eyebrow">Google Maps</div>
+    <h1>Timeline Viewer</h1>
+    <p>Load your timeline.json locally — nothing is uploaded anywhere</p>
+  </header>
+
+  <div class="upload-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".json">
+    <div class="upload-icon">📍</div>
+    <h3>Drop your timeline.json here</h3>
+    <p>or click to browse · file stays on your device</p>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <label>From</label>
+      <input type="date" id="startDate" value="2026-01-23">
+    </div>
+    <div class="field">
+      <label>To</label>
+      <input type="date" id="endDate" value="2026-03-20">
+    </div>
+    <button class="btn" id="filterBtn" disabled>Filter</button>
+    <button class="btn btn-export" id="exportBtn" disabled>Export CSV</button>
+  </div>
+
+  <div id="progress"><div class="spinner"></div>Parsing your timeline…</div>
+  <div id="statsBar" class="stats" style="display:none"></div>
+  <div class="search-bar" id="searchBar" style="display:none">
+    <input type="text" id="searchInput" placeholder="Search places or activities…">
+  </div>
+  <div id="output">
+    <div class="state-msg">
+      <div class="icon">🗺️</div>
+      <h3>No data loaded yet</h3>
+      <p>Load your timeline.json file above to get started</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let allEntries    = [];
+let filteredEntries = [];
+
+const fileInput  = document.getElementById('fileInput');
+const dropZone   = document.getElementById('dropZone');
+const filterBtn  = document.getElementById('filterBtn');
+const exportBtn  = document.getElementById('exportBtn');
+const output     = document.getElementById('output');
+const progress   = document.getElementById('progress');
+const statsBar   = document.getElementById('statsBar');
+const searchBar  = document.getElementById('searchBar');
+const searchInput = document.getElementById('searchInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) processFile(fileInput.files[0]); });
+filterBtn.addEventListener('click', applyFilter);
+exportBtn.addEventListener('click', downloadCSV);
+searchInput.addEventListener('input', renderFiltered);
+
+function processFile(file) {
+  progress.style.display = 'block';
+  output.innerHTML = '';
+  statsBar.style.display = 'none';
+  searchBar.style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      allEntries = parseTimeline(data);
+      filterBtn.disabled = false;
+      exportBtn.disabled = false;
+      progress.style.display = 'none';
+      applyFilter();
+    } catch(err) {
+      progress.style.display = 'none';
+      output.innerHTML = `<div class="state-msg"><div class="icon">⚠️</div><h3>Parse error</h3><p>${escHtml(err.message)}</p></div>`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---------------------------------------------------------------------------
+// parseLatLng — handles every format Google exports use:
+//   "geo:24.4539,54.3773"   ← new on-device export (geo: URI)
+//   "24.4539,54.3773"       ← plain string
+//   "24.4539, 54.3773"      ← plain string with space
+//   { latitude: x, longitude: y }
+//   { lat: x, lng: y }
+// ---------------------------------------------------------------------------
+function parseLatLng(raw) {
+  if (raw == null) return { lat: null, lng: null };
+
+  if (typeof raw === 'object') {
+    const lat = raw.latitude  ?? raw.lat  ?? null;
+    const lng = raw.longitude ?? raw.lng  ?? null;
+    return { lat: toNum(lat), lng: toNum(lng) };
+  }
+
+  // Strip geo: URI prefix if present
+  const str = String(raw).replace(/^geo:/i, '').trim();
+  const parts = str.split(',');
+  if (parts.length < 2) return { lat: null, lng: null };
+  return { lat: toNum(parts[0]), lng: toNum(parts[1]) };
+}
+
+function toNum(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+// ---------------------------------------------------------------------------
+// parseTimeline
+// ---------------------------------------------------------------------------
+function parseTimeline(data) {
+  const entries = [];
+
+  // ── Format 1: new 2024+ on-device export ─────────────────────────────────
+  if (data.semanticSegments) {
+    for (const seg of data.semanticSegments) {
+      const start = new Date(seg.startTime || seg.startTimeGpsTimestamp || 0);
+      const end   = new Date(seg.endTime   || seg.endTimeGpsTimestamp   || start);
+
+      if (seg.visit) {
+        const v        = seg.visit;
+        const topCand  = v.topCandidate || {};
+        const placeLoc = topCand.placeLocation || v.placeLocation || {};
+
+        // Parse coords first — handles "geo:lat,lng" strings
+        const { lat, lng } = parseLatLng(placeLoc.latLng || placeLoc);
+        const mapsUrl = (lat !== null && lng !== null)
+          ? `https://www.google.com/maps?q=${lat},${lng}`
+          : null;
+
+        // Human-readable name priority: explicit name → address → semantic type → coords → fallback
+        const explicitName = placeLoc.name || placeLoc.displayName || topCand.name || topCand.displayName || v.name || null;
+        const explicitAddr = placeLoc.address || topCand.address || topCand.placeAddress || v.address || null;
+        const semanticLabel = (topCand.semanticType && topCand.semanticType !== 'UNKNOWN')
+          ? topCand.semanticType.replace(/^TYPE_/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+          : null;
+        const coordLabel = (lat !== null && lng !== null) ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : null;
+
+        const displayName = explicitName || explicitAddr || semanticLabel || coordLabel || 'Unknown location';
+        const displayAddr = (explicitAddr && explicitAddr !== displayName) ? explicitAddr : '';
+
+        entries.push({ type: 'place', name: displayName, address: displayAddr, start, end, lat, lng, mapsUrl, placeId: topCand.placeId || '', semanticType: topCand.semanticType || '' });
+
+      } else if (seg.activity) {
+        const act      = seg.activity;
+        const topCand  = act.topCandidate || {};
+        const actType  = topCand.type || act.activityType || '';
+        entries.push({ type: 'activity', name: formatActivity(actType) || 'Activity', address: '', start, end, distance: act.distanceMeters || act.distance || 0, activityType: actType });
+
+      } else if (seg.timelinePath) {
+        const first = seg.timelinePath[0] || {};
+        entries.push({ type: 'activity', name: 'Journey', address: '', start: new Date(first.time || start), end, distance: 0, activityType: 'TRAVEL' });
+
+      } else {
+        entries.push({ type: 'unknown', name: 'Timeline segment', address: '', start, end });
+      }
+    }
+
+  // ── Format 2: legacy timelineObjects export ───────────────────────────────
+  } else if (data.timelineObjects) {
+    for (const obj of data.timelineObjects) {
+      if (obj.placeVisit) {
+        const pv  = obj.placeVisit;
+        const loc = pv.location || {};
+        const dur = pv.duration || {};
+        const lat = loc.latitudeE7  ? loc.latitudeE7  / 1e7 : null;
+        const lng = loc.longitudeE7 ? loc.longitudeE7 / 1e7 : null;
+        const mapsUrl = (lat && lng) ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+        entries.push({ type: 'place', name: loc.name || loc.address || 'Unknown Place', address: loc.address || '', start: new Date(dur.startTimestamp || 0), end: new Date(dur.endTimestamp || 0), lat, lng, mapsUrl });
+      } else if (obj.activitySegment) {
+        const as  = obj.activitySegment;
+        const dur = as.duration || {};
+        entries.push({ type: 'activity', name: formatActivity(as.activityType), address: '', start: new Date(dur.startTimestamp || 0), end: new Date(dur.endTimestamp || 0), distance: as.distance, activityType: as.activityType || '' });
+      }
+    }
+
+  // ── Format 3: raw locations array ────────────────────────────────────────
+  } else if (data.locations) {
+    for (const loc of data.locations) {
+      const ts  = new Date(parseInt(loc.timestampMs) || loc.timestamp || 0);
+      const lat = loc.latitudeE7  ? loc.latitudeE7  / 1e7 : null;
+      const lng = loc.longitudeE7 ? loc.longitudeE7 / 1e7 : null;
+      const mapsUrl = (lat && lng) ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+      entries.push({ type: 'location', name: (lat && lng) ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Location point', address: '', start: ts, end: ts, lat, lng, mapsUrl });
+    }
+
+  // ── Format 4: flat array ──────────────────────────────────────────────────
+  } else if (Array.isArray(data)) {
+    for (const item of data) {
+      const ts = new Date(item.startTime || item.timestamp || item.startTimestamp || 0);
+      entries.push({ type: item.type || 'unknown', name: item.name || item.place?.name || 'Entry', address: item.address || '', start: ts, end: new Date(item.endTime || item.endTimestamp || ts) });
+    }
+  }
+
+  return entries.sort((a, b) => a.start - b.start);
+}
+
+function formatActivity(type) {
+  if (!type) return 'Travel';
+  return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function applyFilter() {
+  const start = new Date(document.getElementById('startDate').value + 'T00:00:00');
+  const end   = new Date(document.getElementById('endDate').value   + 'T23:59:59');
+  filteredEntries = allEntries.filter(e => e.start >= start && e.start <= end);
+  searchInput.value = '';
+  renderFiltered();
+}
+
+function renderFiltered() {
+  const q = searchInput.value.trim().toLowerCase();
+  const entries = q
+    ? filteredEntries.filter(e => e.name.toLowerCase().includes(q) || e.address.toLowerCase().includes(q))
+    : filteredEntries;
+
+  const places     = entries.filter(e => e.type === 'place').length;
+  const activities = entries.filter(e => e.type === 'activity').length;
+  const days       = new Set(entries.map(e => e.start.toDateString())).size;
+  const totalDist  = entries.reduce((s, e) => s + (e.distance || 0), 0);
+
+  statsBar.style.display = 'flex';
+  searchBar.style.display = 'block';
+  statsBar.innerHTML = `
+    <div class="stat"><div class="val">${entries.length}</div><div class="lbl">Total entries</div></div>
+    <div class="stat"><div class="val">${places}</div><div class="lbl">Places visited</div></div>
+    <div class="stat"><div class="val">${activities}</div><div class="lbl">Activities</div></div>
+    <div class="stat"><div class="val">${days}</div><div class="lbl">Days tracked</div></div>
+    ${totalDist ? `<div class="stat"><div class="val">${(totalDist / 1000).toFixed(0)}</div><div class="lbl">km travelled</div></div>` : ''}
+  `;
+
+  if (!entries.length) {
+    output.innerHTML = `<div class="state-msg"><div class="icon">🔍</div><h3>No entries found</h3><p>Try adjusting the date range or search query</p></div>`;
+    return;
+  }
+
+  const grouped = {};
+  for (const e of entries) {
+    const day = e.start.toDateString();
+    if (!grouped[day]) grouped[day] = [];
+    grouped[day].push(e);
+  }
+
+  let html = '<div class="timeline">';
+  for (const [day, items] of Object.entries(grouped)) {
+    const d = new Date(day);
+    const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
+    html += `<div class="day-group"><div class="day-header"><span class="day-label">${dayLabel}</span><span class="day-count">${items.length} entries</span></div>`;
+    for (const item of items) html += renderEntry(item);
+    html += `</div>`;
+  }
+  html += '</div>';
+  output.innerHTML = html;
+}
+
+function renderEntry(e) {
+  const icon      = e.type === 'place' ? '📍' : e.type === 'activity' ? activityIcon(e.activityType) : '🔵';
+  const iconClass = e.type === 'place' ? 'icon-place' : e.type === 'activity' ? 'icon-activity' : 'icon-unknown';
+  const startStr  = e.start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const endStr    = e.end && e.end > e.start ? e.end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+  const timeTag   = endStr ? `${startStr} – ${endStr}` : startStr;
+  const typeLabel = e.type === 'place' ? 'Place visit' : e.type === 'activity' ? 'Activity' : 'Location';
+
+  const nameHtml = e.mapsUrl
+    ? `<a href="${e.mapsUrl}" target="_blank" rel="noopener">${escHtml(e.name)}</a>`
+    : escHtml(e.name);
+
+  let tags = `<span class="tag tag-time">${timeTag}</span><span class="tag tag-type">${typeLabel}</span>`;
+  if (e.address && e.address !== e.name) tags += `<span class="tag tag-addr">${escHtml(e.address)}</span>`;
+  if (e.distance) tags += `<span class="tag tag-dist">${(e.distance / 1000).toFixed(1)} km</span>`;
+  if (e.activityType) tags += `<span class="tag tag-type">${formatActivity(e.activityType)}</span>`;
+
+  return `<div class="entry"><div class="entry-head"><div class="entry-icon ${iconClass}">${icon}</div><div class="entry-body"><div class="entry-name">${nameHtml}</div><div class="entry-meta">${tags}</div></div></div></div>`;
+}
+
+function activityIcon(type) {
+  if (!type) return '🚶';
+  const t = type.toUpperCase();
+  if (t.includes('WALK'))                     return '🚶';
+  if (t.includes('RUN'))                      return '🏃';
+  if (t.includes('CYCLING') || t.includes('BICYCLE')) return '🚴';
+  if (t.includes('DRIVE') || t.includes('CAR'))       return '🚗';
+  if (t.includes('TRAIN') || t.includes('RAIL'))      return '🚆';
+  if (t.includes('BUS'))                      return '🚌';
+  if (t.includes('FLIGHT') || t.includes('FLY'))      return '✈️';
+  if (t.includes('BOAT') || t.includes('FERRY'))      return '⛵';
+  if (t.includes('MOTORCYCLE'))               return '🏍️';
+  return '🚶';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ---------------------------------------------------------------------------
+// downloadCSV — exports filteredEntries with GPS coords in Location column
+// ---------------------------------------------------------------------------
+function downloadCSV() {
+  if (!filteredEntries.length) return;
+
+  const dateFrom = document.getElementById('startDate').value;
+  const dateTo   = document.getElementById('endDate').value;
+
+  const headers = ['Date', 'Start Time', 'End Time', 'Type', 'Location / Details', 'Distance (km)'];
+
+  const rows = filteredEntries.map(e => {
+    const date      = e.start.toLocaleDateString('en-CA');  // YYYY-MM-DD
+    const startTime = e.start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const endTime   = (e.end && e.end > e.start)
+                        ? e.end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+                        : '';
+    const type      = e.type === 'place' ? 'Place' : e.type === 'activity' ? 'Activity' : 'Other';
+
+    // For place visits: always prefer raw GPS coords, then Google Maps URL, then name
+    let detail;
+    if (e.type === 'place') {
+      if (e.lat !== null && e.lng !== null) {
+        // Raw coordinates — the most useful value for a spreadsheet
+        detail = `${e.lat}, ${e.lng}`;
+      } else if (e.mapsUrl) {
+        // mapsUrl always contains coords in ?q=lat,lng — extract them
+        const m = e.mapsUrl.match(/[?&]q=([^&]+)/);
+        detail = m ? decodeURIComponent(m[1]) : e.mapsUrl;
+      } else {
+        detail = e.address || e.name || '';
+      }
+    } else {
+      detail = e.name || '';
+    }
+
+    const dist = e.distance ? (e.distance / 1000).toFixed(2) : '';
+    return [date, startTime, endTime, type, detail, dist];
+  });
+
+  const csvLines = [headers, ...rows].map(row =>
+    row.map(cell => {
+      const s = String(cell ?? '');
+      // Wrap in quotes if the value contains a comma, quote, or newline
+      return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(',')
+  ).join('\n');
+
+  const blob = new Blob([csvLines], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `timeline_${dateFrom}_to_${dateTo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
